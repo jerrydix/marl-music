@@ -4,6 +4,7 @@ import subprocess
 from collections import defaultdict
 
 import discord
+from discord import app_commands
 import yt_dlp
 from discord.ext import commands
 from discord.utils import get
@@ -20,9 +21,92 @@ def set_str_len(s: str, length: int):
 
 class Music(commands.Cog):
 
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.music_queues = defaultdict(Queue)
+        
+    @app_commands.command(name='play', description='Marl Karx plays a song for you')
+    @app_commands.describe(prompt='song name')
+    async def playmusic(self, interaction: discord.Interaction, prompt: str):
+        '''Adds a song to the queue either by YouTube URL or YouTube Search.'''
+
+        music_queue = self.music_queues[interaction.guild]
+        voice = get(self.bot.voice_clients, guild=interaction.guild)
+        await interaction.response.defer(ephemeral=False)
+
+        try:
+            channel = interaction.user.voice.channel
+        except:
+            await interaction.followup.send('You\'re not connected to a voice channel.')
+            return
+
+        if voice is not None and not self.client_in_same_channel(interaction.user, interaction.guild):
+            await interaction.followup.send('You\'re not in my voice channel.')
+            return
+   
+        if not prompt.startswith('https://'):
+            prompt = f'ytsearch1:{prompt}'
+
+        try:
+            song = Song(prompt, author=interaction.user)
+        except SongRequestError as e:
+            await interaction.followup.send(e.args[0])
+            return
+
+        music_queue.append(song)
+        await interaction.followup.send(f'Queued song: **{song.title}**')
+
+        if voice is None or not voice.is_connected():
+            await channel.connect()
+
+        await self.play_all_songs(interaction.guild)
+        
+    @app_commands.command(name='stop', description='Marl Karx stops all music and clears the queue')
+    # @app_commands.checks.has_role(781223345319706646)
+    async def stop(self, interaction: discord.Interaction):
+        '''Admin command that stops playback of music and clears out the music queue.'''
+
+        voice = get(self.bot.voice_clients, guild=interaction.guild)
+        queue = self.music_queues.get(interaction.guild)
+
+        if self.client_in_same_channel(interaction.user, interaction.guild):
+            voice.stop()
+            queue.clear()
+            await interaction.response.send_message('Stopping playback')
+            await voice.disconnect()
+        else:
+            await interaction.response.send_message('You\'re not in a voice channel with me.')
+    
+    @app_commands.command(name='skip', description='Marl Karx skips the currently playing song')
+    async def skip(self, interaction: discord.Interaction):
+        '''Puts in your vote to skip the currently played song.'''
+
+        voice = get(self.bot.voice_clients, guild=interaction.guild)
+        queue = self.music_queues.get(interaction.guild)
+
+        if not self.client_in_same_channel(interaction.user, interaction.guild):
+            await interaction.response.send_message('You\'re not in a voice channel with me.')
+            return
+
+        if voice is None or not voice.is_playing():
+            await interaction.response.send_message('I\'m not playing a song right now.')
+            return
+
+        if interaction.user in queue.skip_voters:
+            await interaction.response.send_message('You\'ve already voted to skip this song.')
+            return
+
+        channel = interaction.user.voice.channel
+        required_votes = round(len(channel.members) / 2)
+
+        queue.add_skip_vote(interaction.user)
+
+        if len(queue.skip_voters) >= required_votes:
+            await interaction.response.send_message('Skipping song after successful vote.')
+            voice.stop()
+        else:
+            await interaction.response.send_message(f'You voted to skip this song. {required_votes - len(queue.skip_voters)} more votes are '
+                           f'required.')
 
     @commands.command()
     async def play(self, ctx: commands.Context, url: str, *args: str):
@@ -304,6 +388,6 @@ class Music(commands.Cog):
         return voice is not None and voice.is_connected() and channel == voice.channel
 
 
-async def setup(bot):
-    await bot.add_cog(Music(bot))
+async def setup(client: commands.Bot) -> None:
+    await client.add_cog(Music(client))
     
