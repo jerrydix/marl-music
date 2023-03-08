@@ -1,5 +1,6 @@
 import asyncio
 import os
+import subprocess
 from collections import defaultdict
 
 import discord
@@ -232,7 +233,12 @@ class Music(commands.Cog):
         '''Downloads and starts playing a YouTube video's audio.'''
 
         audio_dir = os.path.join('.', 'audio')
-        audio_path = os.path.join(audio_dir, f'{guild.id}.mp3')
+        audio_path = os.path.join(audio_dir, f'{guild.id}')
+        
+        try:
+            os.remove(audio_path + '.opus')
+        except:
+            pass
         voice = get(self.bot.voice_clients, guild=guild)
 
         queue = self.music_queues.get(guild)
@@ -241,7 +247,7 @@ class Music(commands.Cog):
             'noplaylist': True,
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
+                'preferredcodec': 'opus',
                 'preferredquality': '192',
             }],
             'outtmpl': audio_path
@@ -261,8 +267,9 @@ class Music(commands.Cog):
                 await self.play_all_songs(guild)
                 print('Error downloading song. Skipping.')
                 return
-
-        voice.play(discord.FFmpegPCMAudio(audio_path))
+        
+        # subprocess.run(['./ffmpeg', '-i', os.path.abspath(audio_path) + '.mp3', '-c:a', 'libopus', os.path.abspath(audio_path) + '.ogg'])
+        voice.play(discord.FFmpegPCMAudio(os.path.abspath(audio_path) + '.opus'))
         queue.clear_skip_votes()
 
     async def wait_for_end_of_song(self, guild: discord.Guild):
@@ -297,5 +304,6 @@ class Music(commands.Cog):
         return voice is not None and voice.is_connected() and channel == voice.channel
 
 
-def setup(bot):
-    bot.add_cog(Music(bot))
+async def setup(bot):
+    await bot.add_cog(Music(bot))
+    

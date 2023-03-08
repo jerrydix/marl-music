@@ -8,3 +8,4 @@
 /cogs/__pycache__
 /venv
 .env
+*.exe
