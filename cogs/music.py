@@ -61,9 +61,10 @@ class Music(commands.Cog):
 
         await self.play_all_songs(interaction.guild)
         
+        # @app_commands.checks.has_role(781223345319706646)
+        
     @app_commands.command(name='stop', description='Marl Karx stops all music and clears the queue')
-    # @app_commands.checks.has_role(781223345319706646)
-    async def stop(self, interaction: discord.Interaction):
+    async def stopsong(self, interaction: discord.Interaction):
         '''Admin command that stops playback of music and clears out the music queue.'''
 
         voice = get(self.bot.voice_clients, guild=interaction.guild)
@@ -78,7 +79,7 @@ class Music(commands.Cog):
             await interaction.response.send_message('You\'re not in a voice channel with me.')
     
     @app_commands.command(name='skip', description='Marl Karx skips the currently playing song')
-    async def skip(self, interaction: discord.Interaction):
+    async def skipsong(self, interaction: discord.Interaction):
         '''Puts in your vote to skip the currently played song.'''
 
         voice = get(self.bot.voice_clients, guild=interaction.guild)
@@ -107,6 +108,72 @@ class Music(commands.Cog):
         else:
             await interaction.response.send_message(f'You voted to skip this song. {required_votes - len(queue.skip_voters)} more votes are '
                            f'required.')
+    
+    @app_commands.command(name='fskip', description='Force skip a song')
+    @app_commands.checks.has_role(781223345319706646)
+    async def fskipsong(self, interaction: discord.Interaction):
+        '''Admin command that forces skipping of the currently playing song.'''
+
+        voice = get(self.bot.voice_clients, guild=interaction.guild)
+
+        if not self.client_in_same_channel(interaction.user, interaction.guild):
+            await interaction.response.send_message('You\'re not in a voice channel with me.')
+        elif voice is None or not voice.is_playing():
+            await interaction.response.send_message('I\'m not playing a song right now.')
+        else:
+            voice.stop()
+    
+    @app_commands.command(name='fremove', description='Force remove a song')
+    @app_commands.checks.has_role(781223345319706646)
+    async def fremovesong(self, interaction: discord.Interaction, id: int = None):
+        '''Admin command to forcibly remove a song from the queue by it's position.'''
+
+        queue = self.music_queues.get(interaction.guild)
+
+        if not self.client_in_same_channel(interaction.user, interaction.guild):
+            await interaction.response.send_message('You\'re not in a voice channel with me.')
+            return
+
+        if id is None or 0:
+            await interaction.response.send_message('You need to specify a song by it\'s queue index.')
+            return
+
+        try:
+            song = queue[id - 1]
+        except IndexError:
+            await interaction.response.send_message('A song does not exist at this queue index.')
+            return
+
+        queue.pop(id - 1)
+        await interaction.response.send_message(f'Removed {song.title} from the queue.')
+        return
+    
+    @app_commands.command(name='queue', description='Marl Karx shows the current song queue')
+    async def queuesong(self, interaction: discord.Interaction, page: int = 1):
+        '''Prints out a specified page of the music queue, defaults to first page.'''
+
+        queue = self.music_queues.get(interaction.guild)
+
+        if not self.client_in_same_channel(interaction.user, interaction.guild):
+            await interaction.response.send_message('You\'re not in a voice channel with me.')
+            return
+
+        if not queue:
+            await interaction.response.send_message('I don\'t have anything in my queue right now.')
+            return
+
+        if len(queue) < config.MUSIC_QUEUE_PER_PAGE * (page - 1):
+            await interaction.response.send_message('I don\'t have that many pages in my queue.')
+            return
+
+        to_send = f'```\n    {set_str_len("Song", 66)}{set_str_len("Uploader", 36)}Requested By\n'
+
+        for pos, song in enumerate(queue[:config.MUSIC_QUEUE_PER_PAGE * page], start=config.MUSIC_QUEUE_PER_PAGE * (page - 1)):
+            title = set_str_len(song.title, 65)
+            uploader = set_str_len(song.uploader, 35)
+            to_send += f'{set_str_len(f"{pos + 1})", 4)}{title}|{uploader}|{song.requested_by.display_name}\n'
+
+        await interaction.response.send_message(to_send + '```')
 
     @commands.command()
     async def play(self, ctx: commands.Context, url: str, *args: str):
@@ -143,7 +210,7 @@ class Music(commands.Cog):
         await self.play_all_songs(ctx.guild)
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @commands.has_role(781223345319706646)
     async def stop(self, ctx: commands.Context):
         '''Admin command that stops playback of music and clears out the music queue.'''
 
@@ -190,7 +257,7 @@ class Music(commands.Cog):
                            f'required.')
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @commands.has_role(781223345319706646)
     async def fskip(self, ctx: commands.Context):
         '''Admin command that forces skipping of the currently playing song.'''
 
@@ -248,7 +315,7 @@ class Music(commands.Cog):
                 await ctx.send('You cannot remove a song requested by someone else.')
 
     @commands.command()
-    @commands.has_permissions(ban_members=True)
+    @commands.has_role(781223345319706646)
     async def fremove(self, ctx: commands.Context, song_id: int = None):
         '''Admin command to forcibly remove a song from the queue by it's position.'''
 
@@ -308,6 +375,7 @@ class Music(commands.Cog):
 
             song = queue.next_song()
 
+            # if int(queue.count) > 0:
             await self.play_song(guild, song)
 
         # Disconnect after song queue is empty

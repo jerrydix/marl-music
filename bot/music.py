@@ -10,9 +10,10 @@ class Queue(list):
         self._skip_voters = []
 
     def next_song(self):
+        # if list.count > 0:
         self._current_song = self.pop(0)
-
         return self._current_song
+        return None
 
     def clear(self):
         super().clear()
