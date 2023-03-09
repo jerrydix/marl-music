@@ -18,7 +18,6 @@ class Client(commands.Bot):
     async def setup_hook(self):
         await self.load_extension('cogs.music')
         
-
 bot = Client()
 
 bot.run(config.DISCORD_API_TOKEN)
